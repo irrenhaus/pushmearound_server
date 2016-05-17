@@ -1,10 +1,13 @@
 package models
 
-var deviceSchema = ``
+import (
+	"github.com/jinzhu/gorm"
+)
 
 type Device struct {
-	User              *User
-	DeviceId          string `db:device_id`
-	Platform          string
-	PushNotifications bool `db:push_notifications`
+	gorm.Model
+	UserID            int    `gorm:"index"`
+	DeviceId          string `gorm:"unique_index"`
+	Platform          int    `gorm:"index"`
+	PushNotifications bool
 }

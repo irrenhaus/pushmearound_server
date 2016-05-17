@@ -1,16 +1,19 @@
 package models
 
-var userSchema = `
-CREATE TABLE user (
-	username text,
-	first_name text,
-	last_name text,
-	email text
-);`
+import (
+	"github.com/irrenhaus/pushmearound_server/models"
+	"github.com/jinzhu/gorm"
+	"time"
+)
 
 type User struct {
-	Username  string
-	FirstName string `db:first_name`
-	LastName  string `db:last_name`
-	Email     string
+	gorm.Model
+	Username       string `gorm:"unique_index"`
+	FirstName      string
+	LastName       string
+	Email          string
+	EmailConfirmed bool
+	Password       string
+	Devices        []Device
+	LastSignInAt   time.Time
 }
