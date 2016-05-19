@@ -15,6 +15,7 @@ type User struct {
 	EmailConfirmed bool
 	Password       string
 	Devices        []Device
+	Tokens         []AccessToken
 	LastSignInAt   time.Time
 }
 
