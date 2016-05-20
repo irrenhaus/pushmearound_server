@@ -32,6 +32,14 @@ func NewInternalServerError(err string) HttpResponse {
 	}
 }
 
+func NewUnauthorized(err string) HttpResponse {
+	return HttpResponse{
+		Status: http.StatusUnauthorized,
+		Error:  err,
+		Msg:    "",
+	}
+}
+
 func NewSuccess(msg string) HttpResponse {
 	return HttpResponse{
 		Status: http.StatusOK,

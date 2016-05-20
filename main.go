@@ -3,7 +3,8 @@ package main
 import (
 	"crypto/rsa"
 	"encoding/json"
-	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/codegangsta/negroni"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
@@ -107,9 +108,13 @@ func main() {
 	seed()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/session/{action}", SessionHandler)
 	r.HandleFunc("/", HomeHandler)
-	http.Handle("/", r)
+	r.HandleFunc("/session/logout", MustAuthenticateWrapper(LogoutHandler))
+	r.HandleFunc("/session/login", LoginHandler)
 
-	http.ListenAndServe(":8888", nil)
+	n := negroni.Classic()
+	n.Use(negroni.HandlerFunc(AuthMiddleware))
+	n.UseHandler(r)
+
+	http.ListenAndServe(":8888", n)
 }
