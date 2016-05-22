@@ -16,7 +16,18 @@ type User struct {
 	Password       string
 	Devices        []Device
 	Tokens         []AccessToken
+	Messages       []Message    `gorm:"ForeignKey:FromUser"`
+	Friends        []Friendship `gorm:"ForeignKey:User"`
+	FriendOf       []Friendship `gorm:"ForeignKey:HasFriend"`
 	LastSignInAt   time.Time
+}
+
+type Friendship struct {
+	gorm.Model
+	User        User
+	UserID      uint
+	HasFriend   User
+	HasFriendID uint
 }
 
 func (u *User) SetPassword(plaintextPassword string) error {

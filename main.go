@@ -2,13 +2,11 @@ package main
 
 import (
 	"crypto/rsa"
-	"encoding/json"
 	"github.com/codegangsta/negroni"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
-	HttpResponse "github.com/irrenhaus/pushmearound_server/http"
 	"github.com/irrenhaus/pushmearound_server/models"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
@@ -27,11 +25,6 @@ var (
 	TokenVerifyKey *rsa.PublicKey
 	TokenSignKey   *rsa.PrivateKey
 )
-
-func WriteJSONResponse(w http.ResponseWriter, resp HttpResponse.HttpResponse) {
-	jsonContent, _ := json.Marshal(&resp)
-	http.Error(w, string(jsonContent), resp.Status)
-}
 
 func HomeHandler(resp http.ResponseWriter, req *http.Request) {
 }
@@ -99,7 +92,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	DB.AutoMigrate(&models.User{}, &models.AccessToken{}, &models.Device{})
+	DB.AutoMigrate(
+		&models.User{},
+		&models.AccessToken{},
+		&models.Device{},
+		&models.DeviceOptions{},
+		&models.Message{},
+	)
 
 	if DB.Error != nil {
 		log.Fatal("AutoMigrate failed", DB.Error)
@@ -109,8 +108,14 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler)
-	r.HandleFunc("/session/logout", MustAuthenticateWrapper(LogoutHandler))
+
 	r.HandleFunc("/session/login", LoginHandler)
+	r.HandleFunc("/session/logout", MustAuthenticateWrapper(LogoutHandler))
+
+	onlyPOSTRouter := r.Methods("POST").Subrouter()
+	onlyPOSTRouter.HandleFunc("/device/create", MustAuthenticateWrapper(DeviceCreateHandler))
+	onlyPOSTRouter.HandleFunc("/device/options", MustAuthenticateWrapper(DeviceOptionsHandler))
+	onlyPOSTRouter.HandleFunc("/msg/send", MustAuthenticateWrapper(SendMessageHandler))
 
 	n := negroni.Classic()
 	n.Use(negroni.HandlerFunc(AuthMiddleware))

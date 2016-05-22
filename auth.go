@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
-	HttpResponse "github.com/irrenhaus/pushmearound_server/http"
+	"github.com/irrenhaus/pushmearound_server/httputils"
 	"github.com/irrenhaus/pushmearound_server/models"
 	"log"
 	"net/http"
@@ -204,13 +204,13 @@ func AuthMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFun
 	next(w, r)
 }
 
-func MustAuthenticateWrapper(f func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+func MustAuthenticateWrapper(f httputils.HttpHandler) httputils.HttpHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authenticated := context.Get(r, ContextKeyAuthenticated)
 		user := context.Get(r, ContextKeyUser)
 
 		if authenticated == nil || !(authenticated.(bool)) || user == nil {
-			WriteJSONResponse(w, HttpResponse.NewUnauthorized("unauthorized"))
+			httputils.NewUnauthorized("unauthorized").WriteJSONResponse(w)
 			return
 		}
 
@@ -222,26 +222,26 @@ func LoginHandler(resp http.ResponseWriter, req *http.Request) {
 	authenticated, ok := context.GetOk(req, ContextKeyAuthenticated)
 
 	if ok && authenticated.(bool) {
-		WriteJSONResponse(resp, HttpResponse.NewSuccess("You already are authenticated"))
+		httputils.NewSuccess("You already are authenticated").WriteJSONResponse(resp)
 		return
 	}
 
 	user, err := authenticateUser(req)
 	if err != nil {
-		WriteJSONResponse(resp, HttpResponse.NewBadRequest(err.Error()))
+		httputils.NewBadRequest(err.Error()).WriteJSONResponse(resp)
 		return
 	}
 
 	var token *models.AccessToken
 	token, err = createUserToken(user)
 	if err != nil {
-		WriteJSONResponse(resp, HttpResponse.NewBadRequest(err.Error()))
+		httputils.NewBadRequest(err.Error()).WriteJSONResponse(resp)
 		return
 	}
 
 	session, err := SessionStore.Get(req, SessionName)
 	if err != nil {
-		WriteJSONResponse(resp, HttpResponse.NewInternalServerError(err.Error()))
+		httputils.NewInternalServerError(err.Error()).WriteJSONResponse(resp)
 		return
 	}
 

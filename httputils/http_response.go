@@ -1,6 +1,9 @@
-package httpresponse
+package httputils
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
+)
 
 type HttpResponse struct {
 	Status int
@@ -46,4 +49,10 @@ func NewSuccess(msg string) HttpResponse {
 		Error:  "",
 		Msg:    msg,
 	}
+}
+
+func (r HttpResponse) WriteJSONResponse(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	jsonContent, _ := json.Marshal(r)
+	http.Error(w, string(jsonContent), r.Status)
 }
