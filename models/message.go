@@ -8,6 +8,7 @@ const (
 	ContentTypeMessage = iota
 	ContentTypeURL     = iota
 	ContentTypeFile    = iota
+	ContentTypeLast    = iota
 )
 
 type Message struct {

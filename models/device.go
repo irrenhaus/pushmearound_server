@@ -20,6 +20,7 @@ type DeviceOptions struct {
 
 type Device struct {
 	gorm.Model
+	User             User
 	UserID           uint   `gorm:"index"`
 	DeviceID         string `gorm:"unique_index"`
 	Platform         string `gorm:"index"`
