@@ -53,6 +53,26 @@ func FindUserByLogin(DB *sql.DB, login string) (User, error) {
 	return scanUser(row)
 }
 
+func (u *User) FriendsWith(other *User) bool {
+	if other.ID == u.ID {
+		return true
+	}
+
+	for _, friend := range u.Friends {
+		if friend.ID == other.ID {
+			return true
+		}
+	}
+
+	for _, friendOf := range u.FriendOf {
+		if friendOf.ID == other.ID {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (u *User) SetPassword(plaintextPassword string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(plaintextPassword), bcrypt.DefaultCost)
 

@@ -39,7 +39,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Up to 100M in memory
+	// Store to 100M in memory
 	if err := req.ParseMultipartForm(100 * 1024 * 1024); err != nil {
 		log.Println("Failed to parse multipart form for message sending", err.Error())
 		httputils.NewInternalServerError("Failed to parse multipart form").WriteJSONResponse(resp)
