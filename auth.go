@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
@@ -30,9 +31,14 @@ func authenticateUser(req *http.Request) (*models.User, error) {
 		return nil, errors.New("username/password too short")
 	}
 
-	user := models.User{}
-	if DB.Where("username = ?", username).Or("email = ?", username).First(&user).RecordNotFound() {
+	user, err := models.FindUserByLogin(DB, username)
+	switch err {
+	case sql.ErrNoRows:
 		return nil, errors.New(fmt.Sprintf("No such user: '%s'", username))
+	case nil:
+	default: // Not nil
+		log.Println("SQL error while finding user", err)
+		return nil, err
 	}
 
 	if user.ComparePassword(password) != nil {
@@ -61,7 +67,7 @@ func createUserToken(user *models.User) (*models.AccessToken, error) {
 		Token:  tokenString,
 	}
 
-	if err := DB.Model(user).Association("Tokens").Append(accessToken).Error; err != nil {
+	if err := accessToken.Create(DB); err != nil {
 		log.Println("ERROR Could not append access token", err.Error())
 		return nil, errors.New(fmt.Sprintf("Could not append new access token for user %s", user.Username))
 	}
@@ -70,12 +76,12 @@ func createUserToken(user *models.User) (*models.AccessToken, error) {
 }
 
 func deleteUserToken(token string) {
-	accessToken := models.AccessToken{}
-	if DB.Where("token = ?", token).First(&accessToken).RecordNotFound() || accessToken.ID == 0 {
+	accessToken, err := models.FindAccessToken(DB, token)
+	if err != nil || accessToken.ID == 0 {
 		return
 	}
 
-	DB.Delete(&accessToken)
+	accessToken.Delete(DB)
 }
 
 func removeUserTokenFromSession(resp http.ResponseWriter, req *http.Request) {
@@ -114,8 +120,13 @@ func authenticateToken(tokenString string) (*jwt.Token, *models.AccessToken, err
 	}
 
 	// Find the token in the DB to check if it's still valid
-	accessToken := models.AccessToken{}
-	if DB.Where("token = ?", tokenString).First(&accessToken).RecordNotFound() || accessToken.ID == 0 {
+	accessToken, err := models.FindAccessToken(tokenString)
+	if err != nil || accessToken.ID == 0 {
+		if err != sql.ErrNoRows {
+			// Gracefully handle SQL errors but log them
+			log.Println("SQL error while finding AccessToken", err)
+		}
+
 		// We have a valid token but it is not found in the DB
 		return nil, nil, errors.New("Token not found (expired?)")
 	}
@@ -180,7 +191,13 @@ func AuthMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFun
 		context.Set(r, ContextKeyTokenID, accessToken.ID)
 		context.Set(r, ContextKeyTokenString, accessToken.Token)
 
-		if DB.Model(&accessToken).Related(&user).RecordNotFound() {
+		user, err = models.FindUser(DB, accessToken.UserID)
+		if err != nil {
+			if err != sql.ErrNoRows {
+				// Gracefully handle SQL errors but log them
+				log.Println("SQL error while finding AccessToken", err)
+			}
+
 			// Whupsy, could not find the user for the access token.
 			// Reset all the variables to auth error
 			err = fmt.Errorf("User not found: %d", accessToken.UserID)

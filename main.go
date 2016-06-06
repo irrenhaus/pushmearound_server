@@ -2,18 +2,16 @@ package main
 
 import (
 	"crypto/rsa"
+	"database/sql"
 	"github.com/codegangsta/negroni"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
-	"github.com/irrenhaus/pushmearound_server/models"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
+	_ "github.com/lib/pq"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
 )
 
 const (
@@ -30,7 +28,7 @@ func HomeHandler(resp http.ResponseWriter, req *http.Request) {
 }
 
 var SessionStore *sessions.CookieStore
-var DB *gorm.DB
+var DB *sql.DB
 
 func setupSessions() {
 	// Use a 32 byte key to select AES-256
@@ -65,7 +63,7 @@ func setupSessions() {
 }
 
 func seed() {
-	admin := models.User{}
+	/*admin := models.User{}
 	if DB.Where("username = ?", "admin").First(&admin).RecordNotFound() {
 		admin = models.User{
 			Username:       "admin",
@@ -80,28 +78,16 @@ func seed() {
 		admin.SetPassword("lalala")
 
 		DB.Create(&admin)
-	}
+	}*/
 }
 
 func main() {
 	setupSessions()
 
 	var err error
-	DB, err = gorm.Open("postgres", "host=localhost user=pushmearound dbname=pushmearound sslmode=disable password=pushmearound")
+	DB, err := sql.Open("postgres", "host=localhost user=pushmearound dbname=pushmearound sslmode=disable password=pushmearound")
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	DB.AutoMigrate(
-		&models.User{},
-		&models.AccessToken{},
-		&models.Device{},
-		&models.DeviceOptions{},
-		&models.Message{},
-	)
-
-	if DB.Error != nil {
-		log.Fatal("AutoMigrate failed", DB.Error)
 	}
 
 	seed()
@@ -115,7 +101,12 @@ func main() {
 	onlyPOSTRouter := r.Methods("POST").Subrouter()
 	onlyPOSTRouter.HandleFunc("/device/create", MustAuthenticateWrapper(DeviceCreateHandler))
 	onlyPOSTRouter.HandleFunc("/device/options", MustAuthenticateWrapper(DeviceOptionsHandler))
-	onlyPOSTRouter.HandleFunc("/msg/send", MustAuthenticateWrapper(SendMessageHandler))
+
+	// Sending messages needs to happen as multipart/form-data
+	onlyPOSTRouter.Headers("Content-Type", "multipart/form-data").Subrouter().HandleFunc("/msg/send", MustAuthenticateWrapper(SendMessageHandler))
+
+	onlyGETRouter := r.Methods("GET").Subrouter()
+	onlyGETRouter.HandleFunc("/msg/unread", MustAuthenticateWrapper(UnreadMessageHandler))
 
 	n := negroni.Classic()
 	n.Use(negroni.HandlerFunc(AuthMiddleware))

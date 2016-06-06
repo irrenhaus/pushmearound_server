@@ -10,11 +10,11 @@ import (
 )
 
 func DeviceCreateHandler(resp http.ResponseWriter, req *http.Request) {
-	deviceID := req.FormValue("device_id")
 	platform := req.FormValue("platform")
+	name := req.FormValue("name")
 
-	if deviceID == "" || !models.DevicePlatforms[platform] {
-		httputils.NewBadRequest("Please specify device ID and a valid platform").WriteJSONResponse(resp)
+	if name == "" || !models.DevicePlatforms[platform] {
+		httputils.NewBadRequest("Please specify device name and a valid platform").WriteJSONResponse(resp)
 		return
 	}
 
@@ -26,20 +26,24 @@ func DeviceCreateHandler(resp http.ResponseWriter, req *http.Request) {
 
 	device := models.Device{
 		UserID:   user.(models.User).ID,
-		DeviceID: deviceID,
 		Platform: platform,
+		Name:     name,
 		Options: models.DeviceOptions{
 			PushNotifications: true,
 		},
 	}
 
-	if err := DB.Model(&user).Association("Devices").Append(&device).Error; err != nil {
+	if err := device.Create(DB); err != nil {
 		log.Println("Could not append device", err.Error())
 		httputils.NewInternalServerError("Creating the device failed").WriteJSONResponse(resp)
 		return
 	}
 
-	httputils.NewSuccess("success").WriteJSONResponse(resp)
+	response := httputils.NewSuccess("")
+	response.Data = map[string]string{
+		"device_id": device.ID,
+	}
+	response.WriteJSONResponse(resp)
 }
 
 func DeviceOptionsHandler(resp http.ResponseWriter, req *http.Request) {

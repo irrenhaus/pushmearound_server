@@ -9,6 +9,7 @@ type HttpResponse struct {
 	Status int
 	Error  string
 	Msg    string
+	Data   interface{}
 }
 
 func NewError(status int, err string) HttpResponse {
@@ -54,5 +55,6 @@ func NewSuccess(msg string) HttpResponse {
 func (r HttpResponse) WriteJSONResponse(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	jsonContent, _ := json.Marshal(r)
-	http.Error(w, string(jsonContent), r.Status)
+	w.WriteHeader(r.Status)
+	w.Write(jsonContent)
 }
