@@ -4,8 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/lib/pq"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const (
@@ -23,7 +24,7 @@ type Message struct {
 	DeviceID       string
 	ContentType    uint
 	Title          string
-	Text           string
+	Msg            string
 	URL            string
 	File           string
 }
@@ -37,7 +38,7 @@ type ReceivedMessage struct {
 }
 
 func scanMessage(msg *Message, rows *sql.Rows) error {
-	return rows.Scan(&msg.ID, &msg.CreatedAt, &msg.LastModifiedAt, &msg.UserID, &msg.DeviceID, &msg.ContentType, &msg.Title, &msg.Text, &msg.URL, &msg.File)
+	return rows.Scan(&msg.ID, &msg.CreatedAt, &msg.LastModifiedAt, &msg.UserID, &msg.DeviceID, &msg.ContentType, &msg.Title, &msg.Msg, &msg.URL, &msg.File)
 }
 
 func scanMultiMessages(msgs *[]Message, rows *sql.Rows) error {
@@ -111,7 +112,7 @@ func FindReceivedMessagesByDevice(DB *sql.DB, deviceID string) ([]ReceivedMessag
 }
 
 func (msg *Message) Create(DB *sql.DB) error {
-	return DB.QueryRow("INSERT INTO messages(created_at, last_modified_at, user_id, device_id, content_type, title, text, url, file) VALUES (current_timestamp(), current_timestamp(), $1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at, last_modified_at", msg.UserID, msg.DeviceID, msg.ContentType, msg.Title, msg.Text, msg.URL, msg.File).Scan(&msg.ID, &msg.CreatedAt, &msg.LastModifiedAt)
+	return DB.QueryRow("INSERT INTO messages(created_at, last_modified_at, user_id, device_id, content_type, title, msg, url, file) VALUES (current_timestamp(), current_timestamp(), $1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at, last_modified_at", msg.UserID, msg.DeviceID, msg.ContentType, msg.Title, msg.Msg, msg.URL, msg.File).Scan(&msg.ID, &msg.CreatedAt, &msg.LastModifiedAt)
 }
 
 func (msg *Message) Delete(DB *sql.DB) error {

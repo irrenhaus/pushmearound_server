@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
@@ -12,7 +13,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
+	"github.com/irrenhaus/pushmearound_server/models"
 	_ "github.com/lib/pq"
+	_ "github.com/mattes/migrate/driver/postgres"
+	"github.com/mattes/migrate/migrate"
 )
 
 const (
@@ -64,8 +68,12 @@ func setupSessions() {
 }
 
 func seed() {
-	/*admin := models.User{}
-	if DB.Where("username = ?", "admin").First(&admin).RecordNotFound() {
+	admin, err := models.FindUserByLogin(DB, "admin")
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Fatal(err)
+		}
+
 		admin = models.User{
 			Username:       "admin",
 			FirstName:      "Nils",
@@ -78,12 +86,25 @@ func seed() {
 
 		admin.SetPassword("lalala")
 
-		DB.Create(&admin)
-	}*/
+		err := admin.Create(DB)
+		if err != nil {
+			log.WithFields(log.Fields{"user": "admin", "error": err}).Fatal("Error inserting user seed")
+		}
+
+		log.WithFields(log.Fields{"user": "admin"}).Info("Inserted seed")
+	}
 }
 
 func main() {
 	setupSessions()
+
+	allErrors, ok := migrate.UpSync("postgres://localhost/pushmearound?user=pushmearound&sslmode=disable&password=pushmearound", "./migrations")
+	if !ok {
+		for _, e := range allErrors {
+			log.Error(e)
+		}
+		log.Fatal("Failed to migrate the database")
+	}
 
 	var err error
 	DB, err = sql.Open("postgres", "host=localhost user=pushmearound dbname=pushmearound sslmode=disable password=pushmearound")
@@ -112,6 +133,8 @@ func main() {
 	n := negroni.Classic()
 	n.Use(negroni.HandlerFunc(AuthMiddleware))
 	n.UseHandler(r)
+
+	log.WithFields(log.Fields{"host": "localhost", "port": "8888"}).Info("Now listening to http://localhost:8888")
 
 	http.ListenAndServe(":8888", n)
 }

@@ -2,8 +2,9 @@ package models
 
 import (
 	"database/sql"
-	"golang.org/x/crypto/bcrypt"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
@@ -28,15 +29,13 @@ type Friendship struct {
 	ID             uint
 	CreatedAt      time.Time
 	LastModifiedAt time.Time
-	User           User
 	UserID         uint
-	HasFriend      User
 	HasFriendID    uint
 }
 
 func scanUser(row *sql.Row) (User, error) {
 	u := User{}
-	err := row.Scan(&u.ID, &u.CreatedAt, &u.LastModifiedAt, &u.Username, &u.FirstName, &u.LastName, &u.Email, &u.EmailConfirmed, &u.Password, &u.LastSignInAt)
+	err := row.Scan(&u.ID, &u.CreatedAt, &u.LastModifiedAt, &u.LastSignInAt, &u.Username, &u.FirstName, &u.LastName, &u.Email, &u.EmailConfirmed, &u.Password)
 
 	return u, err
 }
@@ -51,6 +50,10 @@ func FindUserByLogin(DB *sql.DB, login string) (User, error) {
 	row := DB.QueryRow("SELECT * FROM users WHERE username=$1 OR email=$1", login)
 
 	return scanUser(row)
+}
+
+func (u *User) Create(DB *sql.DB) error {
+	return DB.QueryRow("INSERT INTO users (username, first_name, last_name, email, password) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at, last_modified_at, last_sign_in_at, email_confirmed", u.Username, u.FirstName, u.LastName, u.Email, u.Password).Scan(&u.ID, &u.CreatedAt, &u.LastModifiedAt, &u.LastSignInAt, &u.EmailConfirmed)
 }
 
 func (u *User) FriendsWith(other *User) bool {

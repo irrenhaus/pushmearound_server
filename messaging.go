@@ -63,7 +63,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	msg.DeviceID = device.ID
 
 	msg.Title = req.PostFormValue("title")
-	msg.Text = req.PostFormValue("text")
+	msg.Msg = req.PostFormValue("text")
 	msg.URL = req.PostFormValue("url")
 
 	if contentType, err = strconv.ParseUint(req.PostFormValue("content_type"), 10, 32); err != nil {
