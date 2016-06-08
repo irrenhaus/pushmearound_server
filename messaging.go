@@ -2,15 +2,16 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/context"
 	"github.com/irrenhaus/pushmearound_server/httputils"
 	"github.com/irrenhaus/pushmearound_server/models"
 	"github.com/satori/go.uuid"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
 )
 
 func sendMessageToDevice(msg models.Message, deviceID string) *models.ReceivedMessage {
@@ -41,7 +42,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 
 	// Store to 100M in memory
 	if err := req.ParseMultipartForm(100 * 1024 * 1024); err != nil {
-		log.Println("Failed to parse multipart form for message sending", err.Error())
+		log.WithFields(log.Fields{"error": err}).Warn("Failed to parse multipart form for message sending")
 		httputils.NewInternalServerError("Failed to parse multipart form").WriteJSONResponse(resp)
 		return
 	}

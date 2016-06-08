@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/context"
 	"github.com/irrenhaus/pushmearound_server/httputils"
 	"github.com/irrenhaus/pushmearound_server/models"
-	"log"
-	"net/http"
 )
 
 func DeviceCreateHandler(resp http.ResponseWriter, req *http.Request) {
@@ -34,7 +35,7 @@ func DeviceCreateHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := device.Create(DB); err != nil {
-		log.Println("Could not append device", err.Error())
+		log.WithFields(log.Fields{"error": err, "device": device.Name}).Warn("Could not append device")
 		httputils.NewInternalServerError("Creating the device failed").WriteJSONResponse(resp)
 		return
 	}

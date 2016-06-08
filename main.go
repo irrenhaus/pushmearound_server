@@ -3,15 +3,16 @@ package main
 import (
 	"crypto/rsa"
 	"database/sql"
+	"io/ioutil"
+	"net/http"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	_ "github.com/lib/pq"
-	"io/ioutil"
-	"log"
-	"net/http"
 )
 
 const (
@@ -85,7 +86,7 @@ func main() {
 	setupSessions()
 
 	var err error
-	DB, err := sql.Open("postgres", "host=localhost user=pushmearound dbname=pushmearound sslmode=disable password=pushmearound")
+	DB, err = sql.Open("postgres", "host=localhost user=pushmearound dbname=pushmearound sslmode=disable password=pushmearound")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -4,14 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
 	"github.com/irrenhaus/pushmearound_server/httputils"
 	"github.com/irrenhaus/pushmearound_server/models"
-	"log"
-	"net/http"
-	"strings"
-	"time"
 )
 
 const (
@@ -37,7 +38,7 @@ func authenticateUser(req *http.Request) (*models.User, error) {
 		return nil, errors.New(fmt.Sprintf("No such user: '%s'", username))
 	case nil:
 	default: // Not nil
-		log.Println("SQL error while finding user", err)
+		log.WithFields(log.Fields{"error": err, "user": username}).Error("SQL error while finding user")
 		return nil, err
 	}
 
@@ -56,19 +57,17 @@ func createUserToken(user *models.User) (*models.AccessToken, error) {
 
 	tokenString, err := token.SignedString(TokenSignKey)
 	if err != nil {
-		log.Println("ERROR Could not created signed token", err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("Could not created signed token")
 		return nil, errors.New("Could not create signed token")
 	}
 
-	log.Println(tokenString)
-
 	accessToken := models.AccessToken{
+		ID:     tokenString,
 		UserID: user.ID,
-		Token:  tokenString,
 	}
 
 	if err := accessToken.Create(DB); err != nil {
-		log.Println("ERROR Could not append access token", err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("Could not append access token")
 		return nil, errors.New(fmt.Sprintf("Could not append new access token for user %s", user.Username))
 	}
 
@@ -77,7 +76,7 @@ func createUserToken(user *models.User) (*models.AccessToken, error) {
 
 func deleteUserToken(token string) {
 	accessToken, err := models.FindAccessToken(DB, token)
-	if err != nil || accessToken.ID == 0 {
+	if err != nil || accessToken.ID == "" {
 		return
 	}
 
@@ -87,10 +86,10 @@ func deleteUserToken(token string) {
 func removeUserTokenFromSession(resp http.ResponseWriter, req *http.Request) {
 	session, err := SessionStore.Get(req, SessionName)
 	if err != nil {
-		log.Println(err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("Error getting user session")
 	}
 
-	session.Values[ContextKeyTokenString] = ""
+	session.Values[ContextKeyTokenID] = ""
 	session.Options.MaxAge = -1
 	session.Save(req, resp)
 }
@@ -115,16 +114,16 @@ func authenticateToken(tokenString string) (*jwt.Token, *models.AccessToken, err
 
 	if err != nil {
 		// Not a valid token
-		log.Println(err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("Invalid token")
 		return nil, nil, err
 	}
 
 	// Find the token in the DB to check if it's still valid
-	accessToken, err := models.FindAccessToken(tokenString)
-	if err != nil || accessToken.ID == 0 {
+	accessToken, err := models.FindAccessToken(DB, tokenString)
+	if err != nil || accessToken.ID == "" {
 		if err != sql.ErrNoRows {
 			// Gracefully handle SQL errors but log them
-			log.Println("SQL error while finding AccessToken", err)
+			log.WithFields(log.Fields{"error": err, "token": tokenString}).Error("SQL error while finding AccessToken")
 		}
 
 		// We have a valid token but it is not found in the DB
@@ -166,7 +165,7 @@ func AuthMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFun
 	if token == nil || accessToken == nil || err != nil {
 		session, err := SessionStore.Get(r, SessionName)
 		if err == nil {
-			if tokenString, ok := session.Values[ContextKeyTokenString].(string); ok {
+			if tokenString, ok := session.Values[ContextKeyTokenID].(string); ok {
 				token, accessToken, err = authenticateToken(tokenString)
 			}
 		}
@@ -184,18 +183,16 @@ func AuthMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFun
 
 	// Now set our context values
 	context.Set(r, ContextKeyTokenID, nil)
-	context.Set(r, ContextKeyTokenString, "")
 	context.Set(r, ContextKeyUser, nil)
 
 	if accessToken != nil {
 		context.Set(r, ContextKeyTokenID, accessToken.ID)
-		context.Set(r, ContextKeyTokenString, accessToken.Token)
 
 		user, err = models.FindUser(DB, accessToken.UserID)
 		if err != nil {
 			if err != sql.ErrNoRows {
-				// Gracefully handle SQL errors but log them
-				log.Println("SQL error while finding AccessToken", err)
+				// Gracefully handle SQL errors but log it
+				log.WithFields(log.Fields{"error": err, "user": accessToken.UserID}).Error("SQL error while finding an AccessTokens user")
 			}
 
 			// Whupsy, could not find the user for the access token.
@@ -204,7 +201,7 @@ func AuthMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFun
 
 			token = nil
 			accessToken = nil
-			log.Println(err.Error())
+			log.WithFields(log.Fields{"user": accessToken.UserID, "token": accessToken.ID}).Error("User not found")
 		} else {
 			context.Set(r, ContextKeyUser, user)
 		}
@@ -262,14 +259,14 @@ func LoginHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session.Values[ContextKeyTokenString] = token.Token
+	session.Values[ContextKeyTokenID] = token.ID
 	session.Save(req, resp)
 
-	fmt.Fprintf(resp, `{"access_token": "%s"}`, token.Token)
+	fmt.Fprintf(resp, `{"access_token": "%s"}`, token.ID)
 }
 
 func LogoutHandler(resp http.ResponseWriter, req *http.Request) {
-	token := context.Get(req, ContextKeyTokenString)
+	token := context.Get(req, ContextKeyTokenID)
 	deleteUserToken(token.(string))
 	removeUserTokenFromSession(resp, req)
 }
