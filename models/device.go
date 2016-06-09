@@ -3,8 +3,9 @@ package models
 import (
 	"database/sql"
 	"errors"
-	"github.com/satori/go.uuid"
 	"time"
+
+	"github.com/satori/go.uuid"
 )
 
 // Use a map so that we can check for existence without iterating over an array
@@ -16,7 +17,7 @@ var DevicePlatforms map[string]bool = map[string]bool{
 
 type DeviceOptions struct {
 	ID                uint
-	DeviceID          uint
+	DeviceID          string
 	PushNotifications bool
 }
 
@@ -40,12 +41,52 @@ func scanDevice(d *Device, row *sql.Row) error {
 	return row.Scan(&d.ID, &d.CreatedAt, &d.LastModifiedAt, &d.UserID, &d.Platform, &d.Name)
 }
 
+func scanDevices(rows *sql.Rows) ([]Devices, error) {
+	devices := []Device{}
+	for i := 0; rows.Next(); i++ {
+		d := Device{}
+		err := rows.Scan(&devices[i].ID, &devices[i].CreatedAt, &devices[i].LastModifiedAt, &devices[i].UserID, &devices[i].Platform, &devices[i].Name)
+		if err != nil {
+			log.Warn(err)
+			continue
+		}
+
+		devices = append(devices, d)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error(err)
+		return devices, err
+	}
+
+	return devices, nil
+}
+
 func FindDevice(DB *sql.DB, id string) (Device, error) {
 	query := "SELECT * FROM devices WHERE id=$1"
 
 	row := DB.QueryRow(query, id)
 	device := Device{}
 	err := scanDevice(&device, row)
+
+	return device, err
+}
+
+func FindDevicesByUserID(DB *sql.DB, userID string) ([]Device, error) {
+	var devices []Device
+	query := "SELECT * FROM devices WHERE user_id=$1"
+
+	rows, err := DB.Query(query, userID)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.WithFields(log.Fields{"user_id": userID, "error": err}).Error("SQL error finding user's devices")
+		}
+
+		rows.Close()
+
+		return devices, err
+	}
+	err := scanDevices(&device, rows)
 
 	return device, err
 }

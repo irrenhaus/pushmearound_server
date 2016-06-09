@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
@@ -13,7 +12,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
-	"github.com/irrenhaus/pushmearound_server/models"
 	_ "github.com/lib/pq"
 	_ "github.com/mattes/migrate/driver/postgres"
 	"github.com/mattes/migrate/migrate"
@@ -67,34 +65,6 @@ func setupSessions() {
 	}
 }
 
-func seed() {
-	admin, err := models.FindUserByLogin(DB, "admin")
-	if err != nil {
-		if err != sql.ErrNoRows {
-			log.Fatal(err)
-		}
-
-		admin = models.User{
-			Username:       "admin",
-			FirstName:      "Nils",
-			LastName:       "Hesse",
-			Email:          "nphesse@gmail.com",
-			EmailConfirmed: true,
-			Password:       "",
-			LastSignInAt:   time.Now(),
-		}
-
-		admin.SetPassword("lalala")
-
-		err := admin.Create(DB)
-		if err != nil {
-			log.WithFields(log.Fields{"user": "admin", "error": err}).Fatal("Error inserting user seed")
-		}
-
-		log.WithFields(log.Fields{"user": "admin"}).Info("Inserted seed")
-	}
-}
-
 func main() {
 	setupSessions()
 
@@ -112,8 +82,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	seed()
-
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler)
 
@@ -129,6 +97,9 @@ func main() {
 
 	onlyGETRouter := r.Methods("GET").Subrouter()
 	onlyGETRouter.HandleFunc("/msg/unread", MustAuthenticateWrapper(UnreadMessageHandler))
+
+	onlyPUTRouter := r.Methods("PUT").Subrouter()
+	onlyPUTRouter.HandleFunc("/msg/{msg:[0-9]+}", MustAuthenticateWrapper(UpdateMessageHandler))
 
 	n := negroni.Classic()
 	n.Use(negroni.HandlerFunc(AuthMiddleware))

@@ -90,3 +90,8 @@ func (u *User) SetPassword(plaintextPassword string) error {
 func (u *User) ComparePassword(plaintextPassword string) error {
 	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(plaintextPassword))
 }
+
+func (u *User) LoadDevices(DB *sql.DB) error {
+	u.Devices, err = FindDevicesByUserID(DB, u.ID)
+	return err
+}

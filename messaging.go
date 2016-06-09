@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/context"
+	"github.com/gorilla/mux"
 	"github.com/irrenhaus/pushmearound_server/httputils"
 	"github.com/irrenhaus/pushmearound_server/models"
 	"github.com/satori/go.uuid"
@@ -156,9 +158,35 @@ func UnreadMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	deviceID := req.FormValue("device")
 	if deviceID != "" {
 		// We have got a device ID
+
+		err := user.LoadDevices(DB)
+		if err != nil {
+			if err != sql.ErrNoRows {
+				log.WithFields(log.Fields{"user": user.ID, "device": deviceID}).Error("SQL error upon loading a users devices")
+				httputils.NewInternalServerError("Error finding users devices").WriteJSONResponse(resp)
+				return
+			}
+
+			httputils.NewNotFound("No device found for your user").WriteJSONResponse(resp)
+			return
+		}
+
+		isUserDevice := false
+		for _, d := range uuser.Devices {
+			if d.ID == deviceID {
+				isUserDevice = true
+				break
+			}
+		}
+
+		if !isUserDevice {
+			httputils.NewNotFound("No such device for your user").WriteJSONResponse(resp)
+			return
+		}
+
 		msgs, err := models.FindUnreadReceivedMessagesByDevice(DB, deviceID)
 		if err != nil {
-			fmt.Println("Could not find unread messages:", err)
+			log.Error("Could not find unread messages:", err)
 			httputils.NewInternalServerError("Could not find any unread messages for this device").WriteJSONResponse(resp)
 			return
 		}
@@ -180,4 +208,58 @@ func UnreadMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	response := httputils.NewSuccess("")
 	response.Data = msgs
 	response.WriteJSONResponse(resp)
+}
+
+func UpdateMessageHandler(resp http.ResponseWriter, req *http.Request) {
+	user, ok := context.Get(req, ContextKeyUser).(models.User)
+	if !ok {
+		httputils.NewInternalServerError("Could not convert user").WriteJSONResponse(resp)
+		return
+	}
+
+	vars := mux.Vars(req)
+	msgId, err := strconv.ParseUint(vars["msg"], 10, 32)
+	if err != nil {
+		log.WithFields(log.Fields{"msgId": vars["msg"], "err": ok}).Warn("Could not parse message id")
+		httputils.NewBadRequest("Invalid message ID").WriteJSONResponse(resp)
+		return
+	}
+
+	msg, err := models.FindReceivedMessage(DB, msgId)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.WithFields(log.Fields{"user": user.ID, "msg": msgId}).Error("SQL error while searching for message to update")
+		}
+
+		httputils.NewNotFound("No such message found").WriteJSONResponse(resp)
+		return
+	}
+
+	device, err := models.FindDevice(DB, msg.DeviceID)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.WithFields(log.Fields{"user": user.ID, "msg": msg.ID, "device": msg.DeviceID}).Error("SQL error while searching for messages device")
+		} else {
+			log.WithFields(log.Fields{"user": user.ID, "msg": msg.ID, "device": msg.DeviceID}).Warn("No device found for message")
+		}
+
+		httputils.NewNotFound("Error resolving receiving device").WriteJSONResponse(resp)
+		return
+	}
+
+	if device.UserID != user.ID {
+		httputils.NewNotFound("No such message").WriteJSONResponse(resp)
+		return
+	}
+
+	dirty := false
+
+	unread, ok := strconv.ParseBool(req.FormValue("unread"))
+	if ok {
+		msg.Unread = unread
+	}
+
+	if dirty {
+		msg.Update(DB)
+	}
 }
