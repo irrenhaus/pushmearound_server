@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/satori/go.uuid"
 )
 
@@ -41,7 +42,7 @@ func scanDevice(d *Device, row *sql.Row) error {
 	return row.Scan(&d.ID, &d.CreatedAt, &d.LastModifiedAt, &d.UserID, &d.Platform, &d.Name)
 }
 
-func scanDevices(rows *sql.Rows) ([]Devices, error) {
+func scanDevices(rows *sql.Rows) ([]Device, error) {
 	devices := []Device{}
 	for i := 0; rows.Next(); i++ {
 		d := Device{}
@@ -72,8 +73,7 @@ func FindDevice(DB *sql.DB, id string) (Device, error) {
 	return device, err
 }
 
-func FindDevicesByUserID(DB *sql.DB, userID string) ([]Device, error) {
-	var devices []Device
+func FindDevicesByUserID(DB *sql.DB, userID uint) ([]Device, error) {
 	query := "SELECT * FROM devices WHERE user_id=$1"
 
 	rows, err := DB.Query(query, userID)
@@ -84,11 +84,11 @@ func FindDevicesByUserID(DB *sql.DB, userID string) ([]Device, error) {
 
 		rows.Close()
 
-		return devices, err
+		return []Device{}, err
 	}
-	err := scanDevices(&device, rows)
+	devices, err := scanDevices(rows)
 
-	return device, err
+	return devices, err
 }
 
 func (d *Device) Create(DB *sql.DB) error {
@@ -118,14 +118,10 @@ func (d *Device) LoadReceivedMessages(DB *sql.DB) error {
 }
 
 func (d *DeviceOptions) ParseJSONMap(json map[string]interface{}) error {
-	deviceID, ok := json["device_id"]
+	var ok bool
+	d.DeviceID, ok = json["device_id"].(string)
 	if !ok {
 		return errors.New("No device ID specified")
-	}
-
-	d.DeviceID, ok = deviceID.(uint)
-	if !ok {
-		return errors.New("Device ID is not an unsigned integer")
 	}
 
 	pn, ok := json["push_notifications"]

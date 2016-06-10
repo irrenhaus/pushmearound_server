@@ -45,12 +45,13 @@ func scanMultiMessages(msgs *[]Message, rows *sql.Rows) error {
 	for rows.Next() {
 		var msg Message
 		if err := scanMessage(&msg, rows); err != nil {
+			rows.Close()
 			return err
 		}
 		*msgs = append(*msgs, msg)
 	}
 
-	return nil
+	return rows.Err()
 }
 
 func scanReceivedMessage(msg *ReceivedMessage, row *sql.Row) error {
@@ -62,12 +63,13 @@ func scanMultiReceivedMessages(msgs *[]ReceivedMessage, rows *sql.Rows) error {
 		var msg ReceivedMessage
 		err := rows.Scan(&msg.ID, &msg.CreatedAt, &msg.DeviceID, &msg.MessageID, &msg.Unread)
 		if err != nil {
+			rows.Close()
 			return err
 		}
 		*msgs = append(*msgs, msg)
 	}
 
-	return nil
+	return rows.Err()
 }
 
 func FindMessagesByDevice(DB *sql.DB, deviceID string) ([]Message, error) {
@@ -85,10 +87,36 @@ func FindMessagesByDevice(DB *sql.DB, deviceID string) ([]Message, error) {
 	return msgs, err
 }
 
+func FindMessageList(DB *sql.DB, messageIDs []uint) ([]Message, error) {
+	query := "SELECT * FROM messages WHERE id IN $2"
+
+	msgs := []Message{}
+
+	rows, err := DB.Query(query, messageIDs)
+	if err != nil {
+		return msgs, err
+	}
+
+	err = scanMultiMessages(&msgs, rows)
+
+	return msgs, err
+}
+
 func FindReceivedMessage(DB *sql.DB, id uint) (ReceivedMessage, error) {
 	query := "SELECT * FROM received_messages WHERE id=$1"
 
 	row := DB.QueryRow(query, id)
+
+	msg := ReceivedMessage{}
+	err := scanReceivedMessage(&msg, row)
+
+	return msg, err
+}
+
+func FindReceivedMessageByMessage(DB *sql.DB, msgID uint) (ReceivedMessage, error) {
+	query := "SELECT * FROM received_messages WHERE message_id=$1"
+
+	row := DB.QueryRow(query, msgID)
 
 	msg := ReceivedMessage{}
 	err := scanReceivedMessage(&msg, row)
@@ -193,4 +221,9 @@ func (rm *ReceivedMessage) Delete(DB *sql.DB) error {
 	}
 
 	return nil
+}
+
+func (msg *ReceivedMessage) Update(DB *sql.DB) error {
+	_, err := DB.Exec("UPDATE messages SET unread=$2 WHERE id=$1", msg.ID, msg.Unread)
+	return err
 }

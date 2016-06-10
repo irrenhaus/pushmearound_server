@@ -1,4 +1,4 @@
-package httputils
+package httpresponse
 
 import (
 	"encoding/json"
@@ -12,47 +12,55 @@ type HttpResponse struct {
 	Data   interface{}
 }
 
-func NewError(status int, err string) HttpResponse {
+func New() HttpResponse {
+	return HttpResponse{
+		Status: http.StatusOK,
+	}
+}
+
+func Error(status int, err string) HttpResponse {
 	return HttpResponse{
 		Status: status,
 		Error:  err,
-		Msg:    "",
 	}
 }
 
-func NewBadRequest(err string) HttpResponse {
+func BadRequest(err string) HttpResponse {
 	return HttpResponse{
 		Status: http.StatusBadRequest,
 		Error:  err,
-		Msg:    "",
 	}
 }
 
-func NewInternalServerError(err string) HttpResponse {
+func InternalServerError(err string) HttpResponse {
 	return HttpResponse{
 		Status: http.StatusInternalServerError,
 		Error:  err,
-		Msg:    "",
 	}
 }
 
-func NewUnauthorized(err string) HttpResponse {
+func Unauthorized(err string) HttpResponse {
 	return HttpResponse{
 		Status: http.StatusUnauthorized,
 		Error:  err,
-		Msg:    "",
 	}
 }
 
-func NewSuccess(msg string) HttpResponse {
+func NotFound(err string) HttpResponse {
+	return HttpResponse{
+		Status: http.StatusNotFound,
+		Error:  err,
+	}
+}
+
+func Success(msg string) HttpResponse {
 	return HttpResponse{
 		Status: http.StatusOK,
-		Error:  "",
 		Msg:    msg,
 	}
 }
 
-func (r HttpResponse) WriteJSONResponse(w http.ResponseWriter) {
+func (r HttpResponse) WriteJSON(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	jsonContent, _ := json.Marshal(r)
 	w.WriteHeader(r.Status)

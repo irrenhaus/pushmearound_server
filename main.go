@@ -88,6 +88,8 @@ func main() {
 	r.HandleFunc("/session/login", LoginHandler)
 	r.HandleFunc("/session/logout", MustAuthenticateWrapper(LogoutHandler))
 
+	r.HandleFunc("/device/get/{id}", MustAuthenticateWrapper(DeviceGetHandler))
+
 	onlyPOSTRouter := r.Methods("POST").Subrouter()
 	onlyPOSTRouter.HandleFunc("/device/create", MustAuthenticateWrapper(DeviceCreateHandler))
 	onlyPOSTRouter.HandleFunc("/device/options", MustAuthenticateWrapper(DeviceOptionsHandler))

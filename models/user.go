@@ -92,6 +92,7 @@ func (u *User) ComparePassword(plaintextPassword string) error {
 }
 
 func (u *User) LoadDevices(DB *sql.DB) error {
+	var err error
 	u.Devices, err = FindDevicesByUserID(DB, u.ID)
 	return err
 }

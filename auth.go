@@ -11,6 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
+	"github.com/irrenhaus/pushmearound_server/httpresponse"
 	"github.com/irrenhaus/pushmearound_server/httputils"
 	"github.com/irrenhaus/pushmearound_server/models"
 )
@@ -224,7 +225,7 @@ func MustAuthenticateWrapper(f httputils.HttpHandler) httputils.HttpHandler {
 		user := context.Get(r, ContextKeyUser)
 
 		if authenticated == nil || !(authenticated.(bool)) || user == nil {
-			httputils.NewUnauthorized("unauthorized").WriteJSONResponse(w)
+			httpresponse.Unauthorized("unauthorized").WriteJSON(w)
 			return
 		}
 
@@ -236,26 +237,26 @@ func LoginHandler(resp http.ResponseWriter, req *http.Request) {
 	authenticated, ok := context.GetOk(req, ContextKeyAuthenticated)
 
 	if ok && authenticated.(bool) {
-		httputils.NewSuccess("You already are authenticated").WriteJSONResponse(resp)
+		httpresponse.Success("You already are authenticated").WriteJSON(resp)
 		return
 	}
 
 	user, err := authenticateUser(req)
 	if err != nil {
-		httputils.NewBadRequest(err.Error()).WriteJSONResponse(resp)
+		httpresponse.BadRequest(err.Error()).WriteJSON(resp)
 		return
 	}
 
 	var token *models.AccessToken
 	token, err = createUserToken(user)
 	if err != nil {
-		httputils.NewBadRequest(err.Error()).WriteJSONResponse(resp)
+		httpresponse.BadRequest(err.Error()).WriteJSON(resp)
 		return
 	}
 
 	session, err := SessionStore.Get(req, SessionName)
 	if err != nil {
-		httputils.NewInternalServerError(err.Error()).WriteJSONResponse(resp)
+		httpresponse.InternalServerError(err.Error()).WriteJSON(resp)
 		return
 	}
 
