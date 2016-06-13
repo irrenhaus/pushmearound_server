@@ -11,7 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
-	"github.com/irrenhaus/pushmearound_server/httputils"
+	"github.com/irrenhaus/pushmearound_server/httpresponse"
 	"github.com/irrenhaus/pushmearound_server/models"
 	"github.com/satori/go.uuid"
 )
@@ -38,14 +38,14 @@ func sendMessageToDevice(msg models.Message, deviceID string) *models.ReceivedMe
 func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	user, ok := context.Get(req, ContextKeyUser).(models.User)
 	if !ok {
-		httputils.NewInternalServerError("Could not convert user").WriteJSONResponse(resp)
+		httpresponse.InternalServerError("Could not convert user").WriteJSON(resp)
 		return
 	}
 
 	// Store to 100M in memory
 	if err := req.ParseMultipartForm(100 * 1024 * 1024); err != nil {
 		log.WithFields(log.Fields{"error": err}).Warn("Failed to parse multipart form for message sending")
-		httputils.NewInternalServerError("Failed to parse multipart form").WriteJSONResponse(resp)
+		httpresponse.InternalServerError("Failed to parse multipart form").WriteJSON(resp)
 		return
 	}
 
@@ -59,7 +59,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	deviceID := req.PostFormValue("device_id")
 	device, err := models.FindDevice(DB, deviceID)
 	if err != nil {
-		httputils.NewBadRequest("No such device").WriteJSONResponse(resp)
+		httpresponse.BadRequest("No such device").WriteJSON(resp)
 		return
 	}
 	msg.DeviceID = device.ID
@@ -69,12 +69,12 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	msg.URL = req.PostFormValue("url")
 
 	if contentType, err = strconv.ParseUint(req.PostFormValue("content_type"), 10, 32); err != nil {
-		httputils.NewBadRequest("content_type has to be an uint").WriteJSONResponse(resp)
+		httpresponse.BadRequest("content_type has to be an uint").WriteJSON(resp)
 		return
 	}
 
 	if contentType >= models.ContentTypeLast {
-		httputils.NewBadRequest("Unknown content type").WriteJSONResponse(resp)
+		httpresponse.BadRequest("Unknown content type").WriteJSON(resp)
 		return
 	}
 
@@ -86,7 +86,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			fmt.Println("File upload failed:")
 			fmt.Println(err)
-			httputils.NewBadRequest("Message type file selected without uploading file").WriteJSONResponse(resp)
+			httpresponse.BadRequest("Message type file selected without uploading file").WriteJSON(resp)
 			return
 		}
 		defer file.Close()
@@ -103,13 +103,13 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 		if _, err := io.Copy(f, file); err != nil {
 			fmt.Println("Copying uploaded file failed:")
 			fmt.Println(err)
-			httputils.NewInternalServerError("File upload failed").WriteJSONResponse(resp)
+			httpresponse.InternalServerError("File upload failed").WriteJSON(resp)
 			return
 		}
 	}
 
 	if err := msg.Create(DB); err != nil {
-		httputils.NewInternalServerError("Sending the message failed").WriteJSONResponse(resp)
+		httpresponse.InternalServerError("Sending the message failed").WriteJSON(resp)
 		os.Remove(msg.File)
 		return
 	}
@@ -118,7 +118,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	if err == nil {
 		// We have a destination device ID
 		if sendMessageToDevice(msg, destinationDeviceID) == nil {
-			httputils.NewInternalServerError("Sending the message failed").WriteJSONResponse(resp)
+			httpresponse.InternalServerError("Sending the message failed").WriteJSON(resp)
 			msg.Delete(DB)
 			os.Remove(msg.File)
 		}
@@ -130,7 +130,7 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	for _, device := range user.Devices {
 		receivedMessage := sendMessageToDevice(msg, device.ID)
 		if receivedMessage == nil {
-			httputils.NewInternalServerError(fmt.Sprintf("Sending the message to the device %s failed", device.Name)).WriteJSONResponse(resp)
+			httpresponse.InternalServerError(fmt.Sprintf("Sending the message to the device %s failed", device.Name)).WriteJSON(resp)
 
 			for _, sentMessage := range sentMessages {
 				sentMessage.Delete(DB)
@@ -151,9 +151,11 @@ func SendMessageHandler(resp http.ResponseWriter, req *http.Request) {
 func UnreadMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	user, ok := context.Get(req, ContextKeyUser).(models.User)
 	if !ok {
-		httputils.NewInternalServerError("Could not convert user").WriteJSONResponse(resp)
+		httpresponse.InternalServerError("Could not convert user").WriteJSON(resp)
 		return
 	}
+
+	receivedMessages := []models.ReceivedMessage{}
 
 	deviceID := req.FormValue("device")
 	if deviceID != "" {
@@ -163,16 +165,16 @@ func UnreadMessageHandler(resp http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			if err != sql.ErrNoRows {
 				log.WithFields(log.Fields{"user": user.ID, "device": deviceID}).Error("SQL error upon loading a users devices")
-				httputils.NewInternalServerError("Error finding users devices").WriteJSONResponse(resp)
+				httpresponse.InternalServerError("Error finding users devices").WriteJSON(resp)
 				return
 			}
 
-			httputils.NewNotFound("No device found for your user").WriteJSONResponse(resp)
+			httpresponse.NotFound("No device found for your user").WriteJSON(resp)
 			return
 		}
 
 		isUserDevice := false
-		for _, d := range uuser.Devices {
+		for _, d := range user.Devices {
 			if d.ID == deviceID {
 				isUserDevice = true
 				break
@@ -180,40 +182,56 @@ func UnreadMessageHandler(resp http.ResponseWriter, req *http.Request) {
 		}
 
 		if !isUserDevice {
-			httputils.NewNotFound("No such device for your user").WriteJSONResponse(resp)
+			httpresponse.NotFound("No such device").WriteJSON(resp)
 			return
 		}
 
-		msgs, err := models.FindUnreadReceivedMessagesByDevice(DB, deviceID)
+		receivedMessages, err = models.FindUnreadReceivedMessagesByDevice(DB, deviceID)
 		if err != nil {
-			log.Error("Could not find unread messages:", err)
-			httputils.NewInternalServerError("Could not find any unread messages for this device").WriteJSONResponse(resp)
+			if err != sql.ErrNoRows {
+				log.WithFields(log.Fields{"device": deviceID, "error": err}).Error("SQL error while searching unread messages")
+			}
+
+			httpresponse.NotFound("Could not find any unread messages for this device").WriteJSON(resp)
 			return
 		}
-
-		response := httputils.NewSuccess("")
-		response.Data = msgs
-		response.WriteJSONResponse(resp)
-		return
+	} else {
+		// No device ID, just collect all unread messages for this user
+		var err error
+		receivedMessages, err = models.FindUnreadReceivedMessagesByUser(DB, user.ID)
+		if err != nil {
+			fmt.Println("Could not find all unread messages for user:", err)
+			httpresponse.InternalServerError("Could not find any unread messages for this user").WriteJSON(resp)
+			return
+		}
 	}
 
-	// No device ID, just collect all unread messages for this user
-	msgs, err := models.FindUnreadReceivedMessagesByUser(DB, user.ID)
+	messageIDs := []uint{}
+	for _, receivedMessage := range receivedMessages {
+		messageIDs = append(messageIDs, receivedMessage.MessageID)
+	}
+
+	msgs, err := models.FindMessageList(DB, messageIDs)
 	if err != nil {
-		fmt.Println("Could not find all unread messages for user:", err)
-		httputils.NewInternalServerError("Could not find any unread messages for this user").WriteJSONResponse(resp)
+		if err == sql.ErrNoRows {
+			log.WithFields(log.Fields{"messages": msgs, "received": receivedMessages}).Error("Could not find messages for ReceivedMessages")
+		} else {
+			log.WithFields(log.Fields{"messages": msgs, "error": err}).Error("SQL error while loading messages for received messages")
+		}
+
+		httpresponse.NotFound("Could not find any unread messages for this device").WriteJSON(resp)
 		return
 	}
 
-	response := httputils.NewSuccess("")
+	response := httpresponse.Success("")
 	response.Data = msgs
-	response.WriteJSONResponse(resp)
+	response.WriteJSON(resp)
 }
 
 func UpdateMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	user, ok := context.Get(req, ContextKeyUser).(models.User)
 	if !ok {
-		httputils.NewInternalServerError("Could not convert user").WriteJSONResponse(resp)
+		httpresponse.InternalServerError("Could not convert user").WriteJSON(resp)
 		return
 	}
 
@@ -221,17 +239,17 @@ func UpdateMessageHandler(resp http.ResponseWriter, req *http.Request) {
 	msgId, err := strconv.ParseUint(vars["msg"], 10, 32)
 	if err != nil {
 		log.WithFields(log.Fields{"msgId": vars["msg"], "err": ok}).Warn("Could not parse message id")
-		httputils.NewBadRequest("Invalid message ID").WriteJSONResponse(resp)
+		httpresponse.BadRequest("Invalid message ID").WriteJSON(resp)
 		return
 	}
 
-	msg, err := models.FindReceivedMessage(DB, msgId)
+	msg, err := models.FindReceivedMessageByMessage(DB, uint(msgId))
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.WithFields(log.Fields{"user": user.ID, "msg": msgId}).Error("SQL error while searching for message to update")
 		}
 
-		httputils.NewNotFound("No such message found").WriteJSONResponse(resp)
+		httpresponse.NotFound("No such message found").WriteJSON(resp)
 		return
 	}
 
@@ -243,23 +261,25 @@ func UpdateMessageHandler(resp http.ResponseWriter, req *http.Request) {
 			log.WithFields(log.Fields{"user": user.ID, "msg": msg.ID, "device": msg.DeviceID}).Warn("No device found for message")
 		}
 
-		httputils.NewNotFound("Error resolving receiving device").WriteJSONResponse(resp)
+		httpresponse.NotFound("Error resolving receiving device").WriteJSON(resp)
 		return
 	}
 
 	if device.UserID != user.ID {
-		httputils.NewNotFound("No such message").WriteJSONResponse(resp)
+		httpresponse.NotFound("No such message").WriteJSON(resp)
 		return
 	}
 
 	dirty := false
 
-	unread, ok := strconv.ParseBool(req.FormValue("unread"))
-	if ok {
+	unread, err := strconv.ParseBool(req.FormValue("unread"))
+	if err != nil {
 		msg.Unread = unread
 	}
 
 	if dirty {
-		msg.Update(DB)
+		if err := msg.Update(DB); err != nil {
+			log.WithFields(log.Fields{"msg": msg.ID, "error": err}).Error("SQL error while updating received message")
+		}
 	}
 }
