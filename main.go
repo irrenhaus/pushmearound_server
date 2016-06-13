@@ -27,9 +27,6 @@ var (
 	TokenSignKey   *rsa.PrivateKey
 )
 
-func HomeHandler(resp http.ResponseWriter, req *http.Request) {
-}
-
 var SessionStore *sessions.CookieStore
 var DB *sql.DB
 
@@ -83,7 +80,7 @@ func main() {
 	}
 
 	r := mux.NewRouter()
-	r.HandleFunc("/", HomeHandler)
+	r.Handle("/", http.FileServer(http.Dir("./static")))
 
 	r.HandleFunc("/session/login", LoginHandler)
 	r.HandleFunc("/session/logout", MustAuthenticateWrapper(LogoutHandler))
